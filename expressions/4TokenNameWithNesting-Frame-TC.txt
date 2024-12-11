@@ -1,0 +1,157 @@
+// Function to calculate timecode based on the global time using the set fps value
+function calculateTimecode(time, frameRate) {
+    // Calculate total frames based on the time and frame rate
+    var totalFrames = Math.round(time * frameRate); // Use Math.round for more accurate frame count
+
+    // Calculate hours, minutes, seconds, and frames
+    var hours = Math.floor(totalFrames / (3600 * frameRate));
+    totalFrames -= hours * 3600 * frameRate;
+
+    var minutes = Math.floor(totalFrames / (60 * frameRate));
+    totalFrames -= minutes * 60 * frameRate;
+
+    var seconds = Math.floor(totalFrames / frameRate);
+    var frames = Math.round(totalFrames % frameRate); // Use Math.round here as well
+
+    // Format each component to ensure two-digit display
+    var formattedTimecode = 
+        ("0" + hours).slice(-2) + ":" +
+        ("0" + minutes).slice(-2) + ":" +
+        ("0" + seconds).slice(-2) + ":" +
+        ("0" + frames).slice(-2);
+
+    return formattedTimecode;
+}
+
+// Function to search for a valid footage layer (based on name tokens) within a composition, considering local time
+function findFootageLayer(comp, localTimeInComp) {
+    for (var i = 1; i <= comp.numLayers; i++) {
+        var layer = comp.layer(i);
+
+        if (layer.enabled && layer.inPoint <= localTimeInComp && layer.outPoint > localTimeInComp) {
+            if (layer.hasVideo && !layer.nullLayer) {
+                var name = getTokensExcludingFirst(layer.name);
+                if (name !== "") {
+                    return layer;
+                } else if (layer.source && layer.source.numLayers) {
+                    var localTimeInPrecomp = localTimeInComp - layer.startTime;
+                    var nestedFootageLayer = findFootageLayer(layer.source, localTimeInPrecomp);
+
+                    if (nestedFootageLayer) {
+                        return nestedFootageLayer;
+                    }
+                }
+            }
+        }
+    }
+
+    return null;
+}
+
+// Function to search for a footage layer in all layers, including the current layer
+function searchForFootage(globalTime) {
+    var comp = thisComp;
+    var foundFootageInfo = "";
+    var frameRate = 25; // SET YOUR FRAME RATE
+
+    // Calculate frame number based on the current time and layer in-point
+    function getFrameNumber(layer, time) {
+        var localTime = time - layer.inPoint;
+        return Math.round(localTime * frameRate) + 1; // Use Math.round here
+    }
+
+    // Iterate through all layers from top (1) to bottom (numLayers)
+    for (var i = 1; i <= comp.numLayers; i++) {
+        var layer = comp.layer(i);
+
+        if (layer.enabled && layer.inPoint <= globalTime && layer.outPoint > globalTime) {
+
+            if (!layer.hasVideo || layer.nullLayer) continue;
+
+            var hasSource = false;
+            try {
+                if (layer.source) {
+                    hasSource = true;
+                }
+            } catch (e) {
+                hasSource = false;
+            }
+
+            var name = getTokensExcludingFirst(layer.name);
+
+            if (name !== "") {
+                var localFrameNumber = getFrameNumber(layer, globalTime);
+                var maxFrameDigits = 4;
+                var formattedFrameNumber = ("0000" + localFrameNumber).slice(-maxFrameDigits);
+
+                var timecode = calculateTimecode(globalTime, frameRate);
+
+                foundFootageInfo = name + " | Frame: " + formattedFrameNumber + " | TC: " + timecode;
+                break;
+            } else if (hasSource && layer.source.numLayers) {
+                var localTimeInPrecomp = globalTime - layer.startTime;
+
+                try {
+                    var footageLayer = findFootageLayer(layer.source, localTimeInPrecomp);
+
+                    if (footageLayer) {
+                        var nestedName = getTokensExcludingFirst(footageLayer.name);
+                        var localFrameNumber = getFrameNumber(footageLayer, localTimeInPrecomp);
+                        var maxFrameDigits = 4;
+                        var formattedFrameNumber = ("0000" + localFrameNumber).slice(-maxFrameDigits);
+
+                        var timecode = calculateTimecode(globalTime, frameRate);
+
+                        foundFootageInfo = nestedName + " | Frame: " + formattedFrameNumber + " | TC: " + timecode;
+                        break;
+                    }
+                } catch (e) {
+                    continue;
+                }
+            }
+        }
+    }
+
+    // If no footage found, return default message with calculated timecode
+    if (!foundFootageInfo) {
+        foundFootageInfo = "TC: " + calculateTimecode(globalTime, frameRate);
+    }
+    return foundFootageInfo;
+}
+
+// Helper function to extract tokens from the layer's name, excluding the first one, only if there are exactly four tokens
+function getTokensExcludingFirst(name) {
+    var dotIndex = name.lastIndexOf(".");
+    var nameWithoutExt = (dotIndex !== -1) ? name.substring(0, dotIndex) : name;
+
+    var bracketIndex = nameWithoutExt.lastIndexOf("[");
+    if (bracketIndex !== -1) {
+        nameWithoutExt = nameWithoutExt.substring(0, bracketIndex);
+    }
+
+    while (nameWithoutExt.length > 0 && nameWithoutExt.charAt(nameWithoutExt.length - 1) === "_") {
+        nameWithoutExt = nameWithoutExt.substring(0, nameWithoutExt.length - 1);
+    }
+
+    while (nameWithoutExt.length > 0 && (nameWithoutExt.charAt(nameWithoutExt.length - 1) === "." || nameWithoutExt.charAt(nameWithoutExt.length - 1) === " ")) {
+        nameWithoutExt = nameWithoutExt.substring(0, nameWithoutExt.length - 1);
+    }
+
+    var tokens = nameWithoutExt.split("_");
+
+    if (tokens.length === 4) {
+        var tokensExcludingFirst = tokens.slice(1).join("_");
+        return tokensExcludingFirst;
+    } else {
+        return "";
+    }
+}
+
+// Calculate global time for the current time in the top-level comp
+var globalTime = time;
+
+// Search for footage layers in the main comp and within nested precomps
+var footageLayerInfo = searchForFootage(globalTime);
+
+// Display information about the footage layer
+footageLayerInfo;

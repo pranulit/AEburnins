@@ -1,0 +1,16 @@
+// Apply this expression to the Color property of "customNameFromComp" layer
+
+// Get the text content of the layer
+var theText = text.sourceText.toString();
+var theTextLower = theText.toLowerCase(); // Convert text to lowercase for case-insensitive search
+
+// Check for the words in order of priority
+if (theTextLower.indexOf("wip") >= 0) {
+    [1, 1, 0, 1]; // Yellow color (RGBA normalized between 0 and 1)
+} else if (theTextLower.indexOf("not started") >= 0) {
+    [1, 0, 0, 1]; // Red color
+} else if (theTextLower.indexOf("confirmed") >= 0 || theTextLower.indexOf("final") >= 0) {
+    [0, 1, 0, 1]; // Green color
+} else {
+    [1, 1, 1, 1]; // White color as the default
+}

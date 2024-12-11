@@ -1,0 +1,40 @@
+var result = "";
+var myLayerIndex = index;
+var comp = thisComp;
+var numLayers = comp.numLayers;
+
+for (var i = 1; i <= numLayers; i++) {
+    // Skip the current layer to avoid self-reference
+    if (i == myLayerIndex) continue;
+
+    var layer = comp.layer(i);
+
+    // Check if the layer is active at the current time
+    if (layer.active) {
+        // Safely check if the layer's source exists and has numLayers (indicating a composition)
+        var isCompLayer = false;
+        try {
+            if (layer.source && (typeof layer.source.numLayers === "number")) {
+                isCompLayer = true;
+            }
+        } catch (err) {
+            // Ignore errors for layers without a source
+        }
+
+        // If it's a composition layer, set the result and break the loop
+        if (isCompLayer) {
+            var layerName = layer.name;
+            // Check if the name contains '_'
+            var underscoreIndex = layerName.indexOf('_');
+            if (underscoreIndex !== -1) {
+                // Skip the first token (before '_', including '_')
+                layerName = layerName.substring(underscoreIndex + 1);
+            }
+            result = layerName;
+            break;
+        }
+    }
+}
+
+// Return the name of the topmost active composition layer, or an empty string if none found
+result;
